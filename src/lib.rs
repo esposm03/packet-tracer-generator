@@ -3,11 +3,15 @@ use std::{collections::HashMap, fmt::Write, net::IpAddr};
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use slotmap::{DefaultKey, SlotMap};
 
+/// A router
 #[derive(Default, Debug, PartialEq, Eq, Hash)]
 pub struct Device {
     name: String,
 }
 
+/// A link between routers.
+///
+/// `r1` must always be less than `r2`
 #[derive(Default)]
 pub struct Link {
     r1: IpNet,
@@ -113,9 +117,42 @@ impl App {
         let mut map = HashMap::new();
 
         for (device_key, device) in &self.devices {
-            let mut res = String::new();
+            let mut res = String::from("enable\nconfigure terminal\n\n");
 
-            let connected_devices = self
+            // Find directly connected devices, and print
+            // configuration for every interface
+            self.links
+                .iter()
+                .filter_map(|(&key, link)| {
+                    if key.0 == device_key {
+                        Some((key.1, link.r1, link.r2))
+                    } else if key.1 == device_key {
+                        Some((key.0, link.r2, link.r1))
+                    } else {
+                        None
+                    }
+                })
+                .fold(0, |int_num, (_far_key, close_ip, _far_ip)| {
+                    writeln!(
+                        res,
+                        concat!(
+                            "interface GigabitEthernet {}/0\n",
+                            "   ip address {} {}\n",
+                            "   no shutdown\n",
+                            "exit\n",
+                        ),
+                        int_num,
+                        close_ip.addr().to_string(),
+                        close_ip.netmask().to_string(),
+                    )
+                    .unwrap();
+                    int_num + 1
+                });
+
+            res.push_str("router rip\n   version 2\n");
+
+            // Find directly connected devices which are RIP enabled
+            let rip_commands = self
                 .links
                 .iter()
                 .filter_map(|(&key, link)| {
@@ -127,31 +164,13 @@ impl App {
                         None
                     }
                 })
-                .collect::<Vec<_>>();
+                .filter(|(far_key, _close_ip, _far_ip)| self.rip_enabled.contains(far_key))
+                .map(|(_, _, far_ip)| format!("   network {}\n", far_ip.network()))
+                .collect::<String>();
+            res.push_str(&rip_commands);
+            res.push_str("exit\n");
 
-            writeln!(res, "enable\nconfigure terminal\n").unwrap();
-
-            let mut int_num = 0;
-            for (_, close_ip, _far_ip) in &connected_devices {
-                writeln!(
-                    res,
-                    concat!(
-                        "interface GigabitEthernet {}/0\n",
-                        "   ip address {} {}\n",
-                        "   no shutdown\n",
-                        "exit\n",
-                    ),
-                    int_num,
-                    close_ip.addr().to_string(),
-                    close_ip.netmask().to_string(),
-                )
-                .unwrap();
-
-                int_num += 1;
-            }
-
-            writeln!(res, "exit\ndisable").unwrap();
-
+            res.push_str("\nexit\ndisable\n");
             map.insert(device.name.clone(), res);
         }
 
@@ -232,4 +251,44 @@ mod tests {
         );
     }
 
+    #[test]
+    fn sus() {
+        let mut app = App::new();
+
+        let r1 = app.add_device(Device {
+            name: "R1".to_string(),
+        });
+        let r2 = app.add_device(Device {
+            name: "R2".to_string(),
+        });
+
+        app.link(r1, r2, IpNet::from_str("10.0.0.0/30").unwrap());
+        assert_eq!(
+            app.get_link_close(r1, r2).unwrap(),
+            "10.0.0.1/30".parse().unwrap(),
+        );
+        assert_eq!(
+            app.get_link_far(r1, r2).unwrap(),
+            "10.0.0.2/30".parse().unwrap(),
+        );
+
+        app.link(r2, r1, IpNet::from_str("10.0.0.4/30").unwrap());
+        assert_eq!(
+            app.get_link_close(r1, r2).unwrap(),
+            "10.0.0.5/30".parse().unwrap(),
+        );
+        assert_eq!(
+            app.get_link_far(r1, r2).unwrap(),
+            "10.0.0.6/30".parse().unwrap(),
+        );
+
+        app.rip_enabled.push(r1);
+        app.rip_enabled.push(r2);
+
+        for (router_name, commands) in app.to_commands() {
+            println!("{}:\n{}", router_name, commands);
+        }
+
+        todo!();
+    }
 }
