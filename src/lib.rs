@@ -265,46 +265,46 @@ mod tests {
         );
     }
 
-    #[test]
-    fn sus() {
-        let mut app = App::new();
+    // #[test]
+    // fn sus() {
+    //     let mut app = App::new();
 
-        let r1 = app.add_device(Device {
-            name: "R1".to_string(),
-            redistribute_ospf_to_rip: true,
-        });
-        let r2 = app.add_device(Device {
-            name: "R2".to_string(),
-            redistribute_ospf_to_rip: false,
-        });
+    //     let r1 = app.add_device(Device {
+    //         name: "R1".to_string(),
+    //         redistribute_ospf_to_rip: true,
+    //     });
+    //     let r2 = app.add_device(Device {
+    //         name: "R2".to_string(),
+    //         redistribute_ospf_to_rip: false,
+    //     });
 
-        app.link(r1, r2, IpNet::from_str("10.0.0.0/30").unwrap(), Some(10));
-        assert_eq!(
-            app.get_directed_link(r1, r2).unwrap().close_ip,
-            "10.0.0.1/30".parse().unwrap(),
-        );
-        assert_eq!(
-            app.get_directed_link(r1, r2).unwrap().far_ip,
-            "10.0.0.2/30".parse().unwrap(),
-        );
+    //     app.link(r1, r2, IpNet::from_str("10.0.0.0/30").unwrap(), Some(10));
+    //     assert_eq!(
+    //         app.get_directed_link(r1, r2).unwrap().close_ip,
+    //         "10.0.0.1/30".parse().unwrap(),
+    //     );
+    //     assert_eq!(
+    //         app.get_directed_link(r1, r2).unwrap().far_ip,
+    //         "10.0.0.2/30".parse().unwrap(),
+    //     );
 
-        app.link(r2, r1, IpNet::from_str("10.0.0.4/30").unwrap(), Some(10));
-        assert_eq!(
-            app.get_directed_link(r1, r2).unwrap().close_ip,
-            "10.0.0.5/30".parse().unwrap(),
-        );
-        assert_eq!(
-            app.get_directed_link(r1, r2).unwrap().far_ip,
-            "10.0.0.6/30".parse().unwrap(),
-        );
+    //     app.link(r2, r1, IpNet::from_str("10.0.0.4/30").unwrap(), Some(10));
+    //     assert_eq!(
+    //         app.get_directed_link(r1, r2).unwrap().close_ip,
+    //         "10.0.0.5/30".parse().unwrap(),
+    //     );
+    //     assert_eq!(
+    //         app.get_directed_link(r1, r2).unwrap().far_ip,
+    //         "10.0.0.6/30".parse().unwrap(),
+    //     );
 
-        app.rip_enabled.push(r1);
-        app.rip_enabled.push(r2);
+    //     app.rip_enabled.push(r1);
+    //     app.rip_enabled.push(r2);
 
-        for (router_name, commands) in app.to_commands() {
-            println!("{}:\n{}", router_name, commands);
-        }
+    //     for (router_name, commands) in app.to_commands() {
+    //         println!("{}:\n{}", router_name, commands);
+    //     }
 
-        todo!();
-    }
+    //     todo!();
+    // }
 }
