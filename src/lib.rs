@@ -4,10 +4,12 @@ use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use slotmap::{DefaultKey, SlotMap};
 
 /// A router
-#[derive(Default, Debug, PartialEq, Eq, Hash)]
+#[derive(Default, Debug, PartialEq)]
 pub struct Device {
-    name: String,
-    redistribute_ospf_to_rip: bool,
+    pub name: String,
+    pub x: f32,
+    pub y: f32,
+    pub redistribute_ospf_to_rip: bool,
 }
 
 /// A link between routers.
@@ -29,6 +31,7 @@ pub struct DirectedLink {
     ospf_area: Option<u16>,
 }
 
+#[derive(Default)]
 pub struct App {
     pub devices: SlotMap<DefaultKey, Device>,
     pub links: HashMap<(DefaultKey, DefaultKey), Link>,
@@ -208,11 +211,11 @@ mod tests {
 
         let r1 = app.add_device(Device {
             name: "R1".to_string(),
-            redistribute_ospf_to_rip: false,
+            ..Default::default()
         });
         let r2 = app.add_device(Device {
             name: "R2".to_string(),
-            redistribute_ospf_to_rip: false,
+            ..Default::default()
         });
 
         app.link(r1, r2, IpNet::from_str("10.0.0.0/30").unwrap(), None);
@@ -237,11 +240,11 @@ mod tests {
 
         let r1 = app.add_device(Device {
             name: "R1".to_string(),
-            redistribute_ospf_to_rip: false,
+            ..Default::default()
         });
         let r2 = app.add_device(Device {
             name: "R2".to_string(),
-            redistribute_ospf_to_rip: false,
+            ..Default::default()
         });
 
         app.link(r1, r2, IpNet::from_str("10.0.0.0/30").unwrap(), None);
