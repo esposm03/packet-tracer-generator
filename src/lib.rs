@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Write, net::IpAddr};
+use std::{collections::HashMap, fmt::Write, net::IpAddr, str::FromStr};
 
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use slotmap::{DefaultKey, SlotMap};
@@ -9,7 +9,8 @@ pub struct Device {
     pub name: String,
     pub x: f32,
     pub y: f32,
-    pub redistribute_ospf_to_rip: bool,
+    pub redistributions: Redistributions,
+    next_iface: u8,
 }
 
 /// A link between routers.
@@ -19,6 +20,8 @@ pub struct Device {
 pub struct Link {
     r1: IpNet,
     r2: IpNet,
+    r1_iface: u8,
+    r2_iface: u8,
     ospf_area: Option<u16>,
 }
 
@@ -28,6 +31,7 @@ pub struct DirectedLink {
     far_key: DefaultKey,
     close_ip: IpNet,
     far_ip: IpNet,
+    close_iface: u8,
     ospf_area: Option<u16>,
 }
 
@@ -49,8 +53,14 @@ impl App {
     }
 
     /// Register a `Device`
-    pub fn add_device(&mut self, dev: Device) -> DefaultKey {
-        self.devices.insert(dev)
+    pub fn add_device(&mut self, name: &str) -> DeviceBuilder {
+        DeviceBuilder {
+            app: self,
+            name: name.to_string(),
+            x: 0.,
+            y: 0.,
+            redistributions: Redistributions { ospf_to_rip: false },
+        }
     }
 
     /// Retrieve a `Device` by name
@@ -82,6 +92,11 @@ impl App {
             far_key,
             close_ip: if r1_close { link.r1 } else { link.r2 },
             far_ip: if r1_close { link.r2 } else { link.r1 },
+            close_iface: if r1_close {
+                link.r1_iface
+            } else {
+                link.r2_iface
+            },
             ospf_area: link.ospf_area,
         })
     }
@@ -90,7 +105,9 @@ impl App {
     ///
     /// If the two devices already share a link, then it gets updated
     /// to use the new ip. Otherwise, a new link is created
-    pub fn link(&mut self, r1: DefaultKey, r2: DefaultKey, ip: IpNet, ospf_area: Option<u16>) {
+    pub fn link(&mut self, r1: DefaultKey, r2: DefaultKey, ip: &str, ospf_area: Option<u16>) {
+        let ip = IpNet::from_str(ip).unwrap();
+
         assert_ne!(r1, r2);
         assert!(ip.hosts().count() >= 2);
 
@@ -103,6 +120,11 @@ impl App {
         link.r1 = to_ipnet(hosts.next().unwrap(), ip.prefix_len());
         link.r2 = to_ipnet(hosts.next().unwrap(), ip.prefix_len());
         link.ospf_area = ospf_area;
+        link.r1_iface = self.devices[r1].next_iface;
+        link.r2_iface = self.devices[r2].next_iface;
+
+        self.devices[r1].next_iface += 1;
+        self.devices[r2].next_iface += 1;
     }
 
     /// Disconnect the two devices if they are connected
@@ -137,7 +159,6 @@ impl App {
                 .map(|far_key| self.get_directed_link(close_key, far_key).unwrap());
 
             // Network interfaces
-            let mut int_num = 0;
             for link in directly_connected.clone() {
                 writeln!(
                     res,
@@ -147,13 +168,11 @@ impl App {
                         "   no shutdown\n",
                         "exit\n",
                     ),
-                    int_num,
+                    link.close_iface,
                     link.close_ip.addr().to_string(),
                     link.close_ip.netmask().to_string(),
                 )
                 .unwrap();
-
-                int_num += 1;
             }
 
             // RIP v2
@@ -167,7 +186,7 @@ impl App {
 
             // OSPF
             res.push_str("router ospf 1\n");
-            if device.redistribute_ospf_to_rip {
+            if device.redistributions.ospf_to_rip {
                 res.push_str("   redistribute rip subnets\n")
             }
             for link in directly_connected.clone() {
@@ -175,7 +194,7 @@ impl App {
                     writeln!(
                         res,
                         "   network {} {} area {}",
-                        link.far_ip.addr(),
+                        link.far_ip.network(),
                         link.far_ip.hostmask(),
                         ospf_area,
                     )
@@ -200,25 +219,65 @@ fn to_ipnet(ip: IpAddr, cidr: u8) -> IpNet {
     }
 }
 
+#[derive(Default, Debug, PartialEq)]
+pub struct Redistributions {
+    pub ospf_to_rip: bool,
+}
+
+pub struct DeviceBuilder<'a> {
+    app: &'a mut App,
+
+    name: String,
+    x: f32,
+    y: f32,
+    redistributions: Redistributions,
+}
+
+impl DeviceBuilder<'_> {
+    pub fn name(self, name: String) -> Self {
+        Self { name, ..self }
+    }
+
+    pub fn position(self, x: f32, y: f32) -> Self {
+        Self { x, y, ..self }
+    }
+
+    pub fn redistribute_ospf_to_rip(mut self, b: bool) -> Self {
+        self.redistributions.ospf_to_rip = b;
+        self
+    }
+
+    pub fn finish(self) -> DefaultKey {
+        let DeviceBuilder {
+            app,
+            name,
+            redistributions,
+            x,
+            y,
+        } = self;
+
+        app.devices.insert(Device {
+            name,
+            redistributions,
+            x,
+            y,
+            next_iface: 0,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::str::FromStr;
 
     #[test]
     fn add_remove_ip() {
         let mut app = App::new();
 
-        let r1 = app.add_device(Device {
-            name: "R1".to_string(),
-            ..Default::default()
-        });
-        let r2 = app.add_device(Device {
-            name: "R2".to_string(),
-            ..Default::default()
-        });
+        let r1 = app.add_device("R1").finish();
+        let r2 = app.add_device("R2").finish();
 
-        app.link(r1, r2, IpNet::from_str("10.0.0.0/30").unwrap(), None);
+        app.link(r1, r2, "10.0.0.0/30", None);
         assert_eq!(
             app.get_directed_link(r1, r2).unwrap().close_ip,
             "10.0.0.1/30".parse().unwrap(),
@@ -238,16 +297,10 @@ mod tests {
     fn modify_link() {
         let mut app = App::new();
 
-        let r1 = app.add_device(Device {
-            name: "R1".to_string(),
-            ..Default::default()
-        });
-        let r2 = app.add_device(Device {
-            name: "R2".to_string(),
-            ..Default::default()
-        });
+        let r1 = app.add_device("R1").finish();
+        let r2 = app.add_device("R2").finish();
 
-        app.link(r1, r2, IpNet::from_str("10.0.0.0/30").unwrap(), None);
+        app.link(r1, r2, "10.0.0.0/30", None);
         assert_eq!(
             app.get_directed_link(r1, r2).unwrap().close_ip,
             "10.0.0.1/30".parse().unwrap(),
@@ -257,7 +310,7 @@ mod tests {
             "10.0.0.2/30".parse().unwrap(),
         );
 
-        app.link(r2, r1, IpNet::from_str("10.0.0.4/30").unwrap(), None);
+        app.link(r2, r1, "10.0.0.4/30", None);
         assert_eq!(
             app.get_directed_link(r1, r2).unwrap().close_ip,
             "10.0.0.5/30".parse().unwrap(),
