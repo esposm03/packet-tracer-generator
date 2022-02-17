@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Write, net::IpAddr, str::FromStr};
+use std::{collections::BTreeMap, collections::HashMap, fmt::Write, net::IpAddr, str::FromStr};
 
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use slotmap::{DefaultKey, SlotMap};
@@ -137,8 +137,8 @@ impl App {
         self.links.remove(&key);
     }
 
-    pub fn to_commands(&self) -> HashMap<String, String> {
-        let mut map = HashMap::new();
+    pub fn to_commands(&self) -> BTreeMap<String, String> {
+        let mut map = BTreeMap::new();
 
         for (close_key, device) in &self.devices {
             let mut res = String::from("enable\nconfigure terminal\n\n");
@@ -169,8 +169,8 @@ impl App {
                         "exit\n",
                     ),
                     link.close_iface,
-                    link.close_ip.addr().to_string(),
-                    link.close_ip.netmask().to_string(),
+                    link.close_ip.addr(),
+                    link.close_ip.netmask(),
                 )
                 .unwrap();
             }
