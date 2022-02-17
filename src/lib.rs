@@ -143,8 +143,7 @@ impl App {
         for (close_key, device) in &self.devices {
             let mut res = String::from("enable\nconfigure terminal\n\n");
 
-            // Iterator that returns `(far_key, close_ip, far_ip)`
-            let directly_connected = self
+            let directly_connected: Vec<DirectedLink> = self
                 .links
                 .iter()
                 .filter_map(|(&key, _)| {
@@ -156,10 +155,11 @@ impl App {
                         None
                     }
                 })
-                .map(|far_key| self.get_directed_link(close_key, far_key).unwrap());
+                .map(|far_key| self.get_directed_link(close_key, far_key).unwrap())
+                .collect();
 
             // Network interfaces
-            for link in directly_connected.clone() {
+            for link in &directly_connected {
                 writeln!(
                     res,
                     concat!(
@@ -177,7 +177,7 @@ impl App {
 
             // RIP v2
             res.push_str("router rip\n   version 2\n");
-            for link in directly_connected.clone() {
+            for link in &directly_connected {
                 if self.rip_enabled.contains(&link.far_key) {
                     writeln!(res, "   network {}", link.far_ip.network()).unwrap();
                 }
@@ -189,7 +189,7 @@ impl App {
             if device.redistributions.ospf_to_rip {
                 res.push_str("   redistribute rip subnets\n")
             }
-            for link in directly_connected.clone() {
+            for link in &directly_connected {
                 if let Some(ospf_area) = link.ospf_area {
                     writeln!(
                         res,
