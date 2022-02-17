@@ -6,3 +6,6 @@ edition = "2021"
 [dependencies]
 slotmap = "1.0.6"
 ipnet = "2.3.1"
+serde = { version = "1.0.136", features = ["derive"] }
+serde_yaml = "0.8.23"
+linked-hash-map = { version = "0.5.4", features = ["serde_impl"] }

@@ -1,40 +1,13 @@
 use std::{collections::BTreeMap, collections::HashMap, fmt::Write, net::IpAddr, str::FromStr};
 
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
+use serde::Deserialize;
 use slotmap::{DefaultKey, SlotMap};
 
-/// A router
-#[derive(Default, Debug, PartialEq)]
-pub struct Device {
-    pub name: String,
-    pub x: f32,
-    pub y: f32,
-    pub redistributions: Redistributions,
-    next_iface: u8,
-}
-
-/// A link between routers.
+/// A generator of commands for Packet Tracer
 ///
-/// `r1` must always be less than `r2`
-#[derive(Default)]
-pub struct Link {
-    r1: IpNet,
-    r2: IpNet,
-    r1_iface: u8,
-    r2_iface: u8,
-    ospf_area: Option<u16>,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct DirectedLink {
-    close_key: DefaultKey,
-    far_key: DefaultKey,
-    close_ip: IpNet,
-    far_ip: IpNet,
-    close_iface: u8,
-    ospf_area: Option<u16>,
-}
-
+/// Use the methods [`Self::add_device`] and [`Self::link`] to modify the internal state
+/// of the generator, and then user [`Self::to_commands`] when you are finished
 #[derive(Default)]
 pub struct App {
     pub devices: SlotMap<DefaultKey, Device>,
@@ -137,6 +110,7 @@ impl App {
         self.links.remove(&key);
     }
 
+    /// Generate the commands to print to the user
     pub fn to_commands(&self) -> BTreeMap<String, String> {
         let mut map = BTreeMap::new();
 
@@ -211,6 +185,38 @@ impl App {
     }
 }
 
+/// A router
+#[derive(Default, Debug, PartialEq)]
+pub struct Device {
+    pub name: String,
+    pub x: f32,
+    pub y: f32,
+    pub redistributions: Redistributions,
+    next_iface: u8,
+}
+
+/// A link between routers.
+///
+/// `r1` must always be less than `r2`
+#[derive(Default)]
+pub struct Link {
+    r1: IpNet,
+    r2: IpNet,
+    r1_iface: u8,
+    r2_iface: u8,
+    ospf_area: Option<u16>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct DirectedLink {
+    close_key: DefaultKey,
+    far_key: DefaultKey,
+    close_ip: IpNet,
+    far_ip: IpNet,
+    close_iface: u8,
+    ospf_area: Option<u16>,
+}
+
 /// Convert an `IpAddr` to an `IpNet` with the given prefix length
 fn to_ipnet(ip: IpAddr, cidr: u8) -> IpNet {
     match ip {
@@ -219,7 +225,7 @@ fn to_ipnet(ip: IpAddr, cidr: u8) -> IpNet {
     }
 }
 
-#[derive(Default, Debug, PartialEq)]
+#[derive(Default, Debug, PartialEq, Deserialize)]
 pub struct Redistributions {
     pub ospf_to_rip: bool,
 }
@@ -320,47 +326,4 @@ mod tests {
             "10.0.0.6/30".parse().unwrap(),
         );
     }
-
-    // #[test]
-    // fn sus() {
-    //     let mut app = App::new();
-
-    //     let r1 = app.add_device(Device {
-    //         name: "R1".to_string(),
-    //         redistribute_ospf_to_rip: true,
-    //     });
-    //     let r2 = app.add_device(Device {
-    //         name: "R2".to_string(),
-    //         redistribute_ospf_to_rip: false,
-    //     });
-
-    //     app.link(r1, r2, IpNet::from_str("10.0.0.0/30").unwrap(), Some(10));
-    //     assert_eq!(
-    //         app.get_directed_link(r1, r2).unwrap().close_ip,
-    //         "10.0.0.1/30".parse().unwrap(),
-    //     );
-    //     assert_eq!(
-    //         app.get_directed_link(r1, r2).unwrap().far_ip,
-    //         "10.0.0.2/30".parse().unwrap(),
-    //     );
-
-    //     app.link(r2, r1, IpNet::from_str("10.0.0.4/30").unwrap(), Some(10));
-    //     assert_eq!(
-    //         app.get_directed_link(r1, r2).unwrap().close_ip,
-    //         "10.0.0.5/30".parse().unwrap(),
-    //     );
-    //     assert_eq!(
-    //         app.get_directed_link(r1, r2).unwrap().far_ip,
-    //         "10.0.0.6/30".parse().unwrap(),
-    //     );
-
-    //     app.rip_enabled.push(r1);
-    //     app.rip_enabled.push(r2);
-
-    //     for (router_name, commands) in app.to_commands() {
-    //         println!("{}:\n{}", router_name, commands);
-    //     }
-
-    //     todo!();
-    // }
 }
