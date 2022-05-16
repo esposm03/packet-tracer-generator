@@ -79,7 +79,7 @@ impl App {
     /// If the two devices already share a link, then it gets updated
     /// to use the new ip. Otherwise, a new link is created
     pub fn link(&mut self, r1: DefaultKey, r2: DefaultKey, ip: &str, ospf_area: Option<u16>) {
-        let ip = IpNet::from_str(ip).unwrap();
+        let ip = IpNet::from_str(ip).expect(&format!("Failed to parse ip: {ip}"));
 
         assert_ne!(r1, r2);
         assert!(ip.hosts().count() >= 2);

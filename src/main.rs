@@ -6,11 +6,11 @@ use linked_hash_map::LinkedHashMap;
 use serde::Deserialize;
 
 fn main() {
-    let commands = std::fs::read_to_string("commands.yml").unwrap();
+    let commands = std::fs::read_to_string("commands.yml").expect("Error opening file `commands.yml`");
 
     let mut app = App::new();
     let mut keys = HashMap::new();
-    let document = serde_yaml::from_str::<Document>(&commands).unwrap();
+    let document = serde_yaml::from_str::<Document>(&commands).expect("`commands.yml` is not valid YAML");
 
     for (ref name, device) in &document.devices {
         keys.insert(
@@ -34,10 +34,13 @@ fn main() {
     }
 
     for (dev_name, commands) in app.to_commands() {
-        let mut file = File::create(format!("output/{dev_name}.txt")).unwrap();
-        file.write_all(commands.as_bytes()).expect("Failed to write to file");
+        let filename = format!("output/{dev_name}.txt");
+
+        let mut file = File::create(&filename).expect(&format!("Failed to create file {filename}"));
+        file.write_all(commands.as_bytes()).expect(&format!("Failed to write to file {filename}"));
         drop(file);
-        println!("Written file `output/{dev_name}.txt`");
+
+        println!("Written file `{filename}`");
     }
 }
 
