@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, io::{ErrorKind, Write}, fs::File};
 
 use packet_tracer_generator::{App, Redistributions};
 
@@ -28,8 +28,16 @@ fn main() {
         app.link(keys[r1], keys[r2], &link.ip, link.ospf);
     }
 
+    match std::fs::create_dir("output").map_err(|e| e.kind()) {
+        Ok(()) | Err(ErrorKind::AlreadyExists) => {}
+        Err(e) => panic!("Cannot create dir `output`: {:?}", e), 
+    }
+
     for (dev_name, commands) in app.to_commands() {
-        println!("== {dev_name} ==\n{commands}\n");
+        let mut file = File::create(format!("output/{dev_name}.txt")).unwrap();
+        file.write_all(commands.as_bytes()).expect("Failed to write to file");
+        drop(file);
+        println!("Written file `output/{dev_name}.txt`");
     }
 }
 
